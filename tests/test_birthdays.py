@@ -69,7 +69,7 @@ class BirthdayLogicTests(unittest.TestCase):
         self.assertEqual(observed_birthday(entry, 2025), date(2025, 2, 28))
         self.assertEqual(observed_birthday(entry, 2024), date(2024, 2, 29))
 
-    def test_weekly_message_contains_department_and_date_headers(self) -> None:
+    def test_weekly_message_contains_only_name_and_date_headers(self) -> None:
         scheduled = weekly_birthdays_for_notification(
             [BirthdayEntry(full_name="Мария Петрова", department="SberData", day=11, month=4)],
             date(2026, 4, 10),
@@ -77,7 +77,8 @@ class BirthdayLogicTests(unittest.TestCase):
 
         message = "\n".join(build_weekly_reminder_lines(scheduled, date(2026, 4, 10)))
 
-        self.assertIn("Мария Петрова (SberData)", message)
+        self.assertIn("Мария Петрова", message)
+        self.assertNotIn("SberData", message)
         self.assertIn("Суббота, 11 апреля", message)
 
     def test_weekly_empty_message_matches_requested_text(self) -> None:
@@ -85,7 +86,7 @@ class BirthdayLogicTests(unittest.TestCase):
 
         self.assertEqual(lines, ["Дней рождений в Сбере на следующей неделе нет."])
 
-    def test_today_message_contains_date_and_cluster(self) -> None:
+    def test_today_message_contains_date_and_name_without_department(self) -> None:
         entries = [
             BirthdayEntry(full_name="Мария Петрова", department="кластер Морозова", day=10, month=4),
         ]
@@ -93,7 +94,8 @@ class BirthdayLogicTests(unittest.TestCase):
         message = "\n".join(build_today_birthday_lines(entries, date(2026, 4, 10)))
 
         self.assertIn("День рождения сегодня - 10 апреля у:", message)
-        self.assertIn("Мария Петрова (кластер Морозова)", message)
+        self.assertIn("Мария Петрова", message)
+        self.assertNotIn("кластер Морозова", message)
 
     def test_birthdays_for_date_returns_only_today(self) -> None:
         entries = [

@@ -320,8 +320,7 @@ def build_weekly_reminder_lines(
                 ]
             )
 
-        suffix = f" ({scheduled.entry.department})" if scheduled.entry.department else ""
-        lines.append(f"- {scheduled.entry.full_name}{suffix}")
+        lines.append(f"- {scheduled.entry.full_name}")
 
     return lines
 
@@ -329,17 +328,15 @@ def build_weekly_reminder_lines(
 def build_today_birthday_lines(entries: list[BirthdayEntry], target_date: date) -> list[str]:
     lines = [f"День рождения сегодня - {format_target_date(target_date)} у:"]
     for entry in entries:
-        suffix = f" ({entry.department})" if entry.department else ""
-        lines.append(f"- {entry.full_name}{suffix}")
+        lines.append(f"- {entry.full_name}")
     return lines
 
 
 def build_birthday_list_lines(entries: list[BirthdayEntry]) -> list[str]:
     lines = [f"Всего дней рождений: {len(entries)}", ""]
     for entry in entries:
-        suffix = f" ({entry.department})" if entry.department else ""
         lines.append(
             f"#{entry.entry_id} {format_day_month(entry.day, entry.month)} - "
-            f"{entry.full_name}{suffix}"
+            f"{entry.full_name}"
         )
     return lines
