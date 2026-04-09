@@ -29,12 +29,12 @@ cp .env.example .env
 3. Укажите `BOT_TOKEN`.
 4. Укажите `INITIAL_WHITELIST_USER_IDS` через запятую. Это стартовые Telegram user ID, которым будет разрешен доступ в бот.
 5. Укажите `INITIAL_ADMIN_USER_IDS` через запятую. Это стартовые Telegram user ID с ролью администратора.
-6. При необходимости укажите `BIRTHDAYS_FILE`. Если файл указан и таблица `birthdays` пуста, бот импортирует данные при старте.
+6. Если будете переносить рабочую базу дампом, `BIRTHDAYS_FILE` не нужен.
 
 ## Запуск Через Docker
 
 ```bash
-docker compose up --build -d
+docker compose up -d
 ```
 
 После запуска:
@@ -55,12 +55,55 @@ docker compose restart
 docker compose down
 ```
 
+Если после изменения кода нужен принудительный ребилд образа:
+
+```bash
+docker compose up -d --build
+```
+
+## Перенос Базы Через Дамп
+
+Локально, где база уже заполнена:
+
+```bash
+./scripts/create_db_dump.sh
+```
+
+По умолчанию дамп будет создан в `backups/birthday_bot.dump`.
+
+На сервере:
+
+1. Скопируйте проект.
+2. Создайте `.env` из `.env.example` и заполните `BOT_TOKEN`, `INITIAL_WHITELIST_USER_IDS`, `INITIAL_ADMIN_USER_IDS`.
+3. Поднимите сервисы:
+
+```bash
+docker compose up -d
+```
+
+Если на сервере уже занят `5433`, поменяйте `POSTGRES_PORT` в `.env` до первого запуска.
+
+4. Скопируйте дамп на сервер.
+5. Восстановите БД:
+
+```bash
+./scripts/restore_db_dump.sh /путь/к/birthday_bot.dump
+```
+
+Проверка:
+
+```bash
+docker compose exec -T postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select count(*) from birthdays;"'
+```
+
 ## Как Это Работает В Docker
 
 - compose-проект явно называется `birthday_bot`, поэтому контейнеры и сеть поднимаются именно в этой группе;
 - `docker-compose.yml` поднимает сервисы `birthday-bot` и `postgres`;
 - PostgreSQL хранит дни рождения, подписки и whitelist;
-- Excel-файл примонтирован в контейнер только на чтение и используется только для первичного импорта;
+- PostgreSQL опубликован на хосте на порту `POSTGRES_PORT`, по умолчанию `5433`;
+- внутри Docker-сети PostgreSQL доступен как `postgres:5432`;
+- стандартный compose-файл не зависит от `.xlsx`, поэтому серверный запуск не требует локального Excel-файла;
 - если в `data/subscribers.json` или `data/whitelist.json` есть legacy-данные, бот переносит их в PostgreSQL при старте;
 - еженедельная рассылка запускается по пятницам в `12:00` по `Europe/Moscow`;
 - ежедневная рассылка с именинниками на сегодня запускается каждый день в `08:00` по `Europe/Moscow`;
@@ -73,7 +116,8 @@ docker compose down
 - `TIMEZONE` - часовой пояс для расчета дат и времени запуска;
 - `INITIAL_WHITELIST_USER_IDS` - стартовые Telegram user ID через запятую для первого запуска;
 - `INITIAL_ADMIN_USER_IDS` - стартовые Telegram user ID администраторов через запятую;
-- `BIRTHDAYS_FILE` - путь к `.xlsx` для первичного импорта;
+- `BIRTHDAYS_FILE` - необязательный путь к `.xlsx` для первичного импорта в пустую БД;
+- `POSTGRES_PORT` - порт PostgreSQL на хосте, по умолчанию `5433`;
 - `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` - параметры контейнера PostgreSQL в Docker Compose.
 
 ## Формат Excel

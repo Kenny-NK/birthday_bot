@@ -10,10 +10,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-birthday_bot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-birthday_bot}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-birthday_bot} -d ${POSTGRES_DB:-birthday_bot}"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U ${POSTGRES_USER:-birthday_bot} -d ${POSTGRES_DB:-birthday_bot}"]
       interval: 5s
       timeout: 5s
       retries: 10
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -29,7 +31,6 @@ services:
       - .env
     volumes:
       - ./data:/app/data:ro
-      - "./Копия  ДР Банк v2 (002).xlsx:/app/Копия  ДР Банк v2 (002).xlsx:ro"
 
 volumes:
   postgres_data:

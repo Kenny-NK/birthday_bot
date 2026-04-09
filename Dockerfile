@@ -10,6 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY birthday_bot ./birthday_bot
 COPY main.py README.md .env.example ./
-COPY ./*.xlsx ./
 
 CMD ["python", "main.py"]
