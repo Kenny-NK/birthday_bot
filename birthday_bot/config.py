@@ -31,6 +31,7 @@ class Settings:
     legacy_whitelist_path: Path
     timezone_name: str
     initial_whitelist_user_ids: list[int]
+    initial_admin_user_ids: list[int]
 
     @property
     def timezone(self) -> ZoneInfo:
@@ -55,6 +56,13 @@ class Settings:
             if value:
                 initial_whitelist_user_ids.append(int(value))
 
+        initial_admin_user_ids: list[int] = []
+        raw_admins = os.getenv("INITIAL_ADMIN_USER_IDS", raw_whitelist)
+        for item in raw_admins.split(","):
+            value = item.strip()
+            if value:
+                initial_admin_user_ids.append(int(value))
+
         return cls(
             bot_token=bot_token,
             database_url=database_url,
@@ -63,4 +71,5 @@ class Settings:
             legacy_whitelist_path=(base_dir / "data/whitelist.json").resolve(),
             timezone_name=os.getenv("TIMEZONE", "Europe/Moscow"),
             initial_whitelist_user_ids=initial_whitelist_user_ids,
+            initial_admin_user_ids=initial_admin_user_ids,
         )

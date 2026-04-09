@@ -29,13 +29,16 @@ class Database:
         self,
         workbook_path: Optional[Path],
         initial_whitelist_user_ids: list[int],
+        initial_admin_user_ids: list[int],
         legacy_subscribers_path: Optional[Path] = None,
         legacy_whitelist_path: Optional[Path] = None,
     ) -> None:
         self._wait_until_ready()
         self._create_schema()
         self._bootstrap_whitelist(initial_whitelist_user_ids)
+        self._bootstrap_admins(initial_admin_user_ids)
         self._migrate_legacy_json(legacy_subscribers_path, legacy_whitelist_path)
+        self._promote_whitelist_to_admins_if_needed()
         self._seed_birthdays_from_workbook(workbook_path)
 
     def _wait_until_ready(self) -> None:
@@ -83,6 +86,14 @@ class Database:
                     )
                     """
                 )
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS admins (
+                        user_id BIGINT PRIMARY KEY,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
             conn.commit()
 
     def _bootstrap_whitelist(self, initial_whitelist_user_ids: list[int]) -> None:
@@ -98,6 +109,30 @@ class Database:
                     ON CONFLICT (user_id) DO NOTHING
                     """,
                     [(user_id,) for user_id in initial_whitelist_user_ids],
+                )
+            conn.commit()
+
+    def _bootstrap_admins(self, initial_admin_user_ids: list[int]) -> None:
+        if not initial_admin_user_ids:
+            return
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    """
+                    INSERT INTO whitelist (user_id)
+                    VALUES (%s)
+                    ON CONFLICT (user_id) DO NOTHING
+                    """,
+                    [(user_id,) for user_id in initial_admin_user_ids],
+                )
+                cur.executemany(
+                    """
+                    INSERT INTO admins (user_id)
+                    VALUES (%s)
+                    ON CONFLICT (user_id) DO NOTHING
+                    """,
+                    [(user_id,) for user_id in initial_admin_user_ids],
                 )
             conn.commit()
 
@@ -170,6 +205,26 @@ class Database:
                     )
                 conn.commit()
             LOGGER.info("Из legacy JSON перенесено %s whitelist-пользователей в PostgreSQL", len(whitelist_ids))
+
+    def _promote_whitelist_to_admins_if_needed(self) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM admins")
+                admin_count = cur.fetchone()[0]
+                if admin_count > 0:
+                    conn.commit()
+                    return
+
+                cur.execute(
+                    """
+                    INSERT INTO admins (user_id)
+                    SELECT user_id
+                    FROM whitelist
+                    ON CONFLICT (user_id) DO NOTHING
+                    """
+                )
+            conn.commit()
+        LOGGER.info("Таблица admins была пуста, whitelist-пользователи повышены до админов.")
 
     def _load_int_ids_from_json(self, path: Optional[Path], field_name: str) -> list[int]:
         if path is None or not path.exists():
@@ -345,6 +400,57 @@ class Database:
         with self._connect() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1 FROM whitelist WHERE user_id = %s", (user_id,))
+                row = cur.fetchone()
+            conn.commit()
+        return row is not None
+
+    def add_admin_user(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO whitelist (user_id)
+                    VALUES (%s)
+                    ON CONFLICT (user_id) DO NOTHING
+                    """,
+                    (user_id,),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO admins (user_id)
+                    VALUES (%s)
+                    ON CONFLICT (user_id) DO NOTHING
+                    RETURNING user_id
+                    """,
+                    (user_id,),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        return row is not None
+
+    def remove_admin_user(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM admins WHERE user_id = %s RETURNING user_id",
+                    (user_id,),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        return row is not None
+
+    def list_admin_user_ids(self) -> list[int]:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT user_id FROM admins ORDER BY user_id")
+                rows = cur.fetchall()
+            conn.commit()
+        return [row[0] for row in rows]
+
+    def is_admin_user(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM admins WHERE user_id = %s", (user_id,))
                 row = cur.fetchone()
             conn.commit()
         return row is not None

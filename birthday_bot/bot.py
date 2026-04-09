@@ -44,6 +44,8 @@ BOT_COMMANDS = [
     BotCommand("delete", "Удалить день рождения по ID"),
     BotCommand("add_whitelist", "Добавить пользователя в whitelist"),
     BotCommand("del_whitelist", "Удалить пользователя из whitelist"),
+    BotCommand("add_admin", "Выдать роль админа"),
+    BotCommand("del_admin", "Снять роль админа"),
     BotCommand("stop", "Отключить уведомления для чата"),
 ]
 
@@ -127,10 +129,36 @@ async def _ensure_authorized(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return False
 
 
+async def _ensure_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    database: Database = context.application.bot_data["database"]
+    user = update.effective_user
+    message = update.message
+    if user is None or message is None:
+        return False
+
+    if database.is_admin_user(user.id):
+        return True
+
+    await message.reply_text("Недостаточно прав. Для этой команды нужна роль администратора.")
+    return False
+
+
 def authorized_only(handler: HandlerFunc) -> HandlerFunc:
     @wraps(handler)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await _ensure_authorized(update, context):
+            return
+        await handler(update, context)
+
+    return wrapper  # type: ignore[return-value]
+
+
+def admin_only(handler: HandlerFunc) -> HandlerFunc:
+    @wraps(handler)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await _ensure_authorized(update, context):
+            return
+        if not await _ensure_admin(update, context):
             return
         await handler(update, context)
 
@@ -201,7 +229,7 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await _reply_chunked(update, build_birthday_list_lines(entries))
 
 
-@authorized_only
+@admin_only
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     database: Database = context.application.bot_data["database"]
     if update.message is None:
@@ -238,7 +266,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
-@authorized_only
+@admin_only
 async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     database: Database = context.application.bot_data["database"]
     if update.message is None:
@@ -265,7 +293,7 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
-@authorized_only
+@admin_only
 async def add_whitelist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     database: Database = context.application.bot_data["database"]
     if update.message is None:
@@ -286,7 +314,7 @@ async def add_whitelist_command(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text(f"Пользователь {user_id} уже есть в белом списке.")
 
 
-@authorized_only
+@admin_only
 async def del_whitelist_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     database: Database = context.application.bot_data["database"]
     if update.message is None:
@@ -303,6 +331,9 @@ async def del_whitelist_command(update: Update, context: ContextTypes.DEFAULT_TY
     if user_id in user_ids and len(user_ids) == 1:
         await update.message.reply_text("Нельзя удалить последнего пользователя из белого списка.")
         return
+    if database.is_admin_user(user_id):
+        await update.message.reply_text("Нельзя удалить пользователя из белого списка, пока у него есть роль администратора.")
+        return
 
     removed = database.remove_whitelist_user(user_id)
     if removed:
@@ -313,22 +344,82 @@ async def del_whitelist_command(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text(f"Пользователя {user_id} нет в белом списке.")
 
 
-@authorized_only
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+@admin_only
+async def add_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    database: Database = context.application.bot_data["database"]
     if update.message is None:
         return
 
-    await update.message.reply_text(
-        "/start - подписать текущий чат\n"
-        "/stop - отключить напоминания\n"
-        "/check - показать, что уйдет в ближайшую пятницу\n"
-        "/list - показать весь список дней рождений\n"
-        "/add ФИО | Подразделение | ДД.ММ - добавить запись\n"
-        "/delete ID - удалить запись из списка\n"
-        "/add_whitelist USER_ID - добавить пользователя в белый список\n"
-        "/del_whitelist USER_ID - удалить пользователя из белого списка\n"
-        "/help - показать команды"
-    )
+    payload = _command_payload(update)
+    try:
+        user_id = _parse_user_id(payload)
+    except ValueError as error:
+        await update.message.reply_text(str(error))
+        return
+
+    added = database.add_admin_user(user_id)
+    if added:
+        await update.message.reply_text(f"Пользователю {user_id} выдана роль администратора.")
+        return
+
+    await update.message.reply_text(f"Пользователь {user_id} уже является администратором.")
+
+
+@admin_only
+async def del_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    database: Database = context.application.bot_data["database"]
+    if update.message is None:
+        return
+
+    payload = _command_payload(update)
+    try:
+        user_id = _parse_user_id(payload)
+    except ValueError as error:
+        await update.message.reply_text(str(error))
+        return
+
+    admin_ids = database.list_admin_user_ids()
+    if user_id in admin_ids and len(admin_ids) == 1:
+        await update.message.reply_text("Нельзя удалить последнего администратора.")
+        return
+
+    removed = database.remove_admin_user(user_id)
+    if removed:
+        await update.message.reply_text(f"У пользователя {user_id} снята роль администратора.")
+        return
+
+    await update.message.reply_text(f"Пользователь {user_id} не является администратором.")
+
+
+@authorized_only
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    database: Database = context.application.bot_data["database"]
+    user = update.effective_user
+    if update.message is None:
+        return
+
+    lines = [
+        "/start - подписать текущий чат",
+        "/stop - отключить напоминания",
+        "/check - показать, что уйдет в ближайшую пятницу",
+        "/list - показать весь список дней рождений",
+        "/help - показать команды",
+    ]
+    if user is not None and database.is_admin_user(user.id):
+        lines.extend(
+            [
+                "",
+                "Команды администратора:",
+                "/add ФИО | Подразделение | ДД.ММ - добавить запись",
+                "/delete ID - удалить запись из списка",
+                "/add_whitelist USER_ID - добавить пользователя в белый список",
+                "/del_whitelist USER_ID - удалить пользователя из белого списка",
+                "/add_admin USER_ID - выдать роль администратора",
+                "/del_admin USER_ID - снять роль администратора",
+            ]
+        )
+
+    await update.message.reply_text("\n".join(lines))
 
 
 async def weekly_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -414,6 +505,8 @@ def build_application(settings: Settings, database: Database) -> Application:
     application.add_handler(CommandHandler("delete", delete_command))
     application.add_handler(CommandHandler("add_whitelist", add_whitelist_command))
     application.add_handler(CommandHandler("del_whitelist", del_whitelist_command))
+    application.add_handler(CommandHandler("add_admin", add_admin_command))
+    application.add_handler(CommandHandler("del_admin", del_admin_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_error_handler(error_handler)
 
@@ -450,6 +543,7 @@ def run(settings: Settings) -> None:
     database.initialize(
         workbook_path=settings.workbook_path,
         initial_whitelist_user_ids=settings.initial_whitelist_user_ids,
+        initial_admin_user_ids=settings.initial_admin_user_ids,
         legacy_subscribers_path=settings.legacy_subscribers_path,
         legacy_whitelist_path=settings.legacy_whitelist_path,
     )
