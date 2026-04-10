@@ -31,6 +31,7 @@ class Settings:
     legacy_whitelist_path: Path
     timezone_name: str
     telegram_local_address: Optional[str]
+    telegram_proxy_url: Optional[str]
     initial_whitelist_user_ids: list[int]
     initial_admin_user_ids: list[int]
 
@@ -72,6 +73,7 @@ class Settings:
             legacy_whitelist_path=(base_dir / "data/whitelist.json").resolve(),
             timezone_name=os.getenv("TIMEZONE", "Europe/Moscow"),
             telegram_local_address=os.getenv("TELEGRAM_LOCAL_ADDRESS") or None,
+            telegram_proxy_url=os.getenv("TELEGRAM_PROXY_URL") or None,
             initial_whitelist_user_ids=initial_whitelist_user_ids,
             initial_admin_user_ids=initial_admin_user_ids,
         )

@@ -490,10 +490,13 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def build_application(settings: Settings, database: Database) -> Application:
     request_kwargs = {}
+    transport_kwargs = {}
     if settings.telegram_local_address:
-        request_kwargs["httpx_kwargs"] = {
-            "transport": httpx.AsyncHTTPTransport(local_address=settings.telegram_local_address)
-        }
+        transport_kwargs["local_address"] = settings.telegram_local_address
+    if settings.telegram_proxy_url:
+        transport_kwargs["proxy"] = settings.telegram_proxy_url
+    if transport_kwargs:
+        request_kwargs["httpx_kwargs"] = {"transport": httpx.AsyncHTTPTransport(**transport_kwargs)}
 
     request = HTTPXRequest(**request_kwargs)
     get_updates_request = HTTPXRequest(**request_kwargs)

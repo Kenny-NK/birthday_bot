@@ -115,6 +115,7 @@ docker compose exec -T postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_D
 - `DATABASE_URL` - строка подключения к PostgreSQL;
 - `TIMEZONE` - часовой пояс для расчета дат и времени запуска;
 - `TELEGRAM_LOCAL_ADDRESS` - локальный адрес для исходящих соединений Telegram API; `0.0.0.0` принудительно использует IPv4 и нужен на серверах с проблемным IPv6;
+- `TELEGRAM_PROXY_URL` - необязательный HTTP/SOCKS proxy для доступа к Telegram API, например `socks5://127.0.0.1:1080`;
 - `INITIAL_WHITELIST_USER_IDS` - стартовые Telegram user ID через запятую для первого запуска;
 - `INITIAL_ADMIN_USER_IDS` - стартовые Telegram user ID администраторов через запятую;
 - `BIRTHDAYS_FILE` - необязательный путь к `.xlsx` для первичного импорта в пустую БД;
