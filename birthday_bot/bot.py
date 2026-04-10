@@ -14,6 +14,7 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
 )
+from telegram.request import HTTPXRequest
 
 from birthday_bot.birthdays import (
     birthdays_for_date,
@@ -487,7 +488,21 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 def build_application(settings: Settings, database: Database) -> Application:
-    application = ApplicationBuilder().token(settings.bot_token).post_init(_configure_bot_commands).build()
+    request_kwargs = {}
+    if settings.telegram_local_address:
+        request_kwargs["httpx_kwargs"] = {"local_address": settings.telegram_local_address}
+
+    request = HTTPXRequest(**request_kwargs)
+    get_updates_request = HTTPXRequest(**request_kwargs)
+
+    application = (
+        ApplicationBuilder()
+        .token(settings.bot_token)
+        .request(request)
+        .get_updates_request(get_updates_request)
+        .post_init(_configure_bot_commands)
+        .build()
+    )
     if application.job_queue is None:
         raise RuntimeError(
             "JobQueue недоступен. Установите зависимости из requirements.txt, "
