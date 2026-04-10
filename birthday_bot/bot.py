@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from functools import wraps
 from typing import Awaitable, Callable, TypeVar
 
+import httpx
 import psycopg
 from telegram import BotCommand, Update
 from telegram.error import Forbidden, TelegramError
@@ -490,7 +491,9 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 def build_application(settings: Settings, database: Database) -> Application:
     request_kwargs = {}
     if settings.telegram_local_address:
-        request_kwargs["httpx_kwargs"] = {"local_address": settings.telegram_local_address}
+        request_kwargs["httpx_kwargs"] = {
+            "transport": httpx.AsyncHTTPTransport(local_address=settings.telegram_local_address)
+        }
 
     request = HTTPXRequest(**request_kwargs)
     get_updates_request = HTTPXRequest(**request_kwargs)
